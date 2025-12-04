@@ -74,6 +74,17 @@ async def health_check():
     return {"status": "healthy", "service": "utah-tourism-ai"}
 
 
+@app.get("/api/tools")
+async def list_tools(request: Request):
+    """List available MCP tools for debugging."""
+    mcp_client: MCPClient = request.app.state.mcp_client
+    try:
+        tools = await mcp_client.list_available_tools()
+        return {"tools": tools}
+    except Exception as e:
+        return {"error": str(e), "tools": []}
+
+
 @app.post("/recommend", response_class=HTMLResponse)
 async def get_recommendation(
     request: Request,
