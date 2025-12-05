@@ -79,6 +79,7 @@ Your recommendations should be:
 5. Provide practical tips (best times, what to bring, etc.)
 
 Format your response with clear sections using markdown:
+- **Current Weather** (if weather data is provided)
 - **Recommended Destinations**
 - **Suggested Itinerary**
 - **Pro Tips**
@@ -103,9 +104,11 @@ Format your response with clear sections using markdown:
 **Current Travel Information:**
 {search_results}
 """
-        
+
         user_message += """
-Please provide a detailed, personalized travel recommendation that matches these preferences."""
+Please provide a detailed, personalized travel recommendation that matches these preferences.
+
+IMPORTANT: If weather information is provided above, you MUST include it in a dedicated **Current Weather** section at the beginning of your response. Format the weather conditions clearly for each location mentioned."""
 
         try:
             # Call the LLM via Docker Model Runner's OpenAI-compatible API

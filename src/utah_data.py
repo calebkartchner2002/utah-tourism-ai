@@ -235,10 +235,40 @@ UTAH_DESTINATIONS = {
 }
 
 
+def get_weather_locations(interests: str, season: str) -> list[str]:
+    """
+    Determine which Utah cities to fetch weather for based on interests.
+
+    Args:
+        interests: User's travel interests
+        season: Preferred season
+
+    Returns:
+        List of city names for weather lookup
+    """
+    interests_lower = interests.lower()
+    locations = []
+
+    # Skiing locations
+    if "ski" in interests_lower or season.lower() == "winter":
+        locations.extend(["Park City, Utah", "Salt Lake City, Utah"])
+
+    # Southern Utah parks
+    if any(word in interests_lower for word in ["hiking", "photography", "nature", "canyon", "national park"]):
+        locations.extend(["Moab, Utah", "Springdale, Utah"])
+
+    # Default to Salt Lake City if no specific match
+    if not locations:
+        locations.append("Salt Lake City, Utah")
+
+    # Return unique locations (max 3)
+    return list(dict.fromkeys(locations))[:3]
+
+
 def get_destinations_context() -> str:
     """
     Generate a context string from Utah destinations for LLM prompts.
-    
+
     Returns:
         Formatted string with Utah destination information
     """

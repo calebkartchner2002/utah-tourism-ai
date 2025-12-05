@@ -141,6 +141,44 @@ class MCPClient:
             logger.error(f"Fetch failed: {e}")
             return ""
 
+    async def get_weather(self, location: str) -> str:
+        """
+        Get current weather and forecast for a location via MCP Gateway.
+
+        Args:
+            location: City name (e.g., "Salt Lake City, Utah" or "Park City, UT")
+
+        Returns:
+            Weather information as formatted text
+        """
+        try:
+            await self._ensure_connected()
+
+            if not self.session:
+                logger.warning("No MCP session available")
+                return ""
+
+            logger.info(f"Fetching weather for: {location}")
+
+            # Call the weather tool from openweather server
+            result = await self.session.call_tool(
+                "weather",
+                arguments={"city": location}
+            )
+
+            logger.info(f"Weather tool returned: {type(result)}")
+
+            if hasattr(result, 'content') and result.content:
+                weather_text = self._extract_text_content(result.content)
+                logger.info(f"Weather data: {weather_text[:200]}...")
+                return weather_text
+
+            return ""
+
+        except Exception as e:
+            logger.error(f"Weather fetch failed: {e}", exc_info=True)
+            return ""
+
     def _extract_text_content(self, content) -> str:
         """Extract text from MCP content."""
         if isinstance(content, list):

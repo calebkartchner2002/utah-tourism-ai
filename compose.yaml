@@ -24,10 +24,13 @@ services:
   mcp-gateway:
     image: docker/mcp-gateway:latest
     use_api_socket: true
+    volumes:
+      - ./.env:/.env:ro
     command:
       - --transport=sse
+      - --secrets=/.env
       # MCP servers for Utah tourism functionality
-      - --servers=duckduckgo,fetch
+      - --servers=duckduckgo,fetch,openweather
 
 # Docker Model Runner configuration
 # Using Llama 3.2 for balanced performance and quality

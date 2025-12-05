@@ -18,7 +18,7 @@ from fastapi.templating import Jinja2Templates
 
 from .llm_client import LLMClient
 from .mcp_client import MCPClient
-from .utah_data import UTAH_DESTINATIONS, get_destinations_context
+from .utah_data import UTAH_DESTINATIONS, get_destinations_context, get_weather_locations
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -106,7 +106,26 @@ async def get_recommendation(
     try:
         # Build context from Utah destination data
         utah_context = get_destinations_context()
-        
+
+        # Fetch current weather for relevant locations
+        weather_info = ""
+        try:
+            weather_locations = get_weather_locations(interests, season)
+            logger.info(f"Fetching weather for: {weather_locations}")
+
+            weather_results = []
+            for location in weather_locations:
+                weather_data = await mcp_client.get_weather(location)
+                if weather_data:
+                    weather_results.append(f"**{location}**: {weather_data}")
+
+            if weather_results:
+                weather_info = "\n".join(weather_results)
+                logger.info(f"Weather fetched for {len(weather_results)} locations")
+        except Exception as e:
+            logger.warning(f"Weather fetch failed (continuing without): {e}")
+            weather_info = ""
+
         # Optionally search for current information
         search_results = ""
         if include_search:
@@ -117,7 +136,17 @@ async def get_recommendation(
             except Exception as e:
                 logger.warning(f"Search failed (continuing without): {e}")
                 search_results = ""
-        
+
+        # Combine weather and search results
+        additional_context = ""
+        if weather_info:
+            additional_context += f"\n**Current Weather Conditions:**\n{weather_info}\n"
+        if search_results:
+            additional_context += f"\n**Travel Tips from Web:**\n{search_results}"
+
+        # Close MCP session before LLM generation to avoid timeout
+        await mcp_client.close()
+
         # Generate recommendation using LLM
         recommendation = await llm_client.generate_recommendation(
             interests=interests,
@@ -125,7 +154,7 @@ async def get_recommendation(
             season=season,
             activity_level=activity_level,
             utah_context=utah_context,
-            search_results=search_results
+            search_results=additional_context
         )
         
         return templates.TemplateResponse(
@@ -167,10 +196,24 @@ async def api_recommend(
     """JSON API endpoint for recommendations."""
     llm_client: LLMClient = request.app.state.llm_client
     mcp_client: MCPClient = request.app.state.mcp_client
-    
+
     try:
         utah_context = get_destinations_context()
-        
+
+        # Fetch weather
+        weather_info = ""
+        try:
+            weather_locations = get_weather_locations(interests, season)
+            weather_results = []
+            for location in weather_locations:
+                weather_data = await mcp_client.get_weather(location)
+                if weather_data:
+                    weather_results.append(f"**{location}**: {weather_data}")
+            if weather_results:
+                weather_info = "\n".join(weather_results)
+        except Exception:
+            pass
+
         search_results = ""
         if include_search:
             try:
@@ -178,14 +221,24 @@ async def api_recommend(
                 search_results = await mcp_client.search(search_query)
             except Exception:
                 pass
-        
+
+        # Combine weather and search
+        additional_context = ""
+        if weather_info:
+            additional_context += f"\n**Current Weather:**\n{weather_info}\n"
+        if search_results:
+            additional_context += f"\n**Travel Tips:**\n{search_results}"
+
+        # Close MCP session before LLM generation to avoid timeout
+        await mcp_client.close()
+
         recommendation = await llm_client.generate_recommendation(
             interests=interests,
             duration=duration,
             season=season,
             activity_level=activity_level,
             utah_context=utah_context,
-            search_results=search_results
+            search_results=additional_context
         )
         
         return {
