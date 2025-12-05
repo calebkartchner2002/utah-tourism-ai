@@ -79,11 +79,11 @@ Your recommendations should be:
 5. Provide practical tips (best times, what to bring, etc.)
 
 Format your response with clear sections using markdown:
-- **Current Weather** (if weather data is provided)
 - **Recommended Destinations**
 - **Suggested Itinerary**
 - **Pro Tips**
-- **What to Pack**"""
+- **What to Pack**
+- **Current Weather** (if weather data is provided - place this at the end)"""
 
         # Build the user prompt
         user_message = f"""Please create a personalized Utah travel recommendation based on:
@@ -108,7 +108,13 @@ Format your response with clear sections using markdown:
         user_message += """
 Please provide a detailed, personalized travel recommendation that matches these preferences.
 
-IMPORTANT: If weather information is provided above, you MUST include it in a dedicated **Current Weather** section at the beginning of your response. Format the weather conditions clearly for each location mentioned."""
+IMPORTANT: If weather information is provided above, you MUST include it in a dedicated **Current Weather** section at the END of your response (after What to Pack).
+
+Format the weather in a clean, human-readable way:
+- Convert temperatures from Celsius to Fahrenheit (formula: F = C × 9/5 + 32)
+- Convert Unix timestamps to readable times (e.g., "sunrise at 7:15 AM")
+- Use natural language (e.g., "Currently 25°F with clear skies" instead of "Now: -3.89 metric")
+- Only include relevant details: conditions, temperature, feels like, and wind if significant"""
 
         try:
             # Call the LLM via Docker Model Runner's OpenAI-compatible API

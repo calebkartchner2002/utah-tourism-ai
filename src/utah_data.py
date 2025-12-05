@@ -346,3 +346,18 @@ def get_destination_by_interest(interest: str) -> list[dict]:
                 })
     
     return matches
+
+
+def get_destinations_summary() -> str:
+    """
+    Generate a lightweight summary of Utah destinations.
+    Provides just enough context without overwhelming the LLM.
+    Web search will provide detailed, up-to-date information.
+    
+    Returns:
+        Brief formatted string with Utah highlights
+    """
+    return """Utah's "Mighty Five" National Parks: Zion, Bryce Canyon, Arches, Canyonlands, Capitol Reef
+Major Ski Resorts: Park City Mountain, Deer Valley, Alta, Snowbird, Brighton
+Popular Activities: Hiking, skiing, mountain biking, rock climbing, photography
+Major Cities: Salt Lake City (gateway), Park City (ski town), Moab (adventure hub)"""

@@ -18,7 +18,7 @@ from fastapi.templating import Jinja2Templates
 
 from .llm_client import LLMClient
 from .mcp_client import MCPClient
-from .utah_data import UTAH_DESTINATIONS, get_destinations_context, get_weather_locations
+from .utah_data import UTAH_DESTINATIONS, get_destinations_context, get_destinations_summary, get_weather_locations
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -104,8 +104,8 @@ async def get_recommendation(
     mcp_client: MCPClient = request.app.state.mcp_client
     
     try:
-        # Build context from Utah destination data
-        utah_context = get_destinations_context()
+        # Use minimal static context - let web search provide fresh, dynamic info
+        utah_context = get_destinations_summary()
 
         # Fetch current weather for relevant locations
         weather_info = ""
@@ -126,16 +126,16 @@ async def get_recommendation(
             logger.warning(f"Weather fetch failed (continuing without): {e}")
             weather_info = ""
 
-        # Optionally search for current information
+        # Always search for fresh, dynamic information (ignore include_search flag)
         search_results = ""
-        if include_search:
-            try:
-                search_query = f"Utah tourism {interests} {season} travel tips"
-                search_results = await mcp_client.search(search_query)
-                logger.info(f"Search completed for: {search_query}")
-            except Exception as e:
-                logger.warning(f"Search failed (continuing without): {e}")
-                search_results = ""
+        try:
+            # More specific search query for better results
+            search_query = f"best {interests} in Utah {season} {duration} itinerary recommendations 2025"
+            search_results = await mcp_client.search(search_query)
+            logger.info(f"Search completed for: {search_query}")
+        except Exception as e:
+            logger.warning(f"Search failed (continuing without): {e}")
+            search_results = ""
 
         # Combine weather and search results
         additional_context = ""
@@ -198,7 +198,8 @@ async def api_recommend(
     mcp_client: MCPClient = request.app.state.mcp_client
 
     try:
-        utah_context = get_destinations_context()
+        # Use minimal static context - let web search provide fresh, dynamic info
+        utah_context = get_destinations_summary()
 
         # Fetch weather
         weather_info = ""
@@ -214,13 +215,13 @@ async def api_recommend(
         except Exception:
             pass
 
+        # Always search for fresh, dynamic information
         search_results = ""
-        if include_search:
-            try:
-                search_query = f"Utah tourism {interests} {season}"
-                search_results = await mcp_client.search(search_query)
-            except Exception:
-                pass
+        try:
+            search_query = f"best {interests} in Utah {season} {duration} itinerary recommendations 2025"
+            search_results = await mcp_client.search(search_query)
+        except Exception:
+            pass
 
         # Combine weather and search
         additional_context = ""
