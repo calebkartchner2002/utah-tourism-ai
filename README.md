@@ -1,32 +1,31 @@
-# Utah Tourism AI 🏜️
+# Utah Tourism AI
 
-An AI-powered Utah tourism recommendation system that demonstrates Docker's new AI capabilities, including **Docker Model Runner** for local LLM hosting and **MCP Gateway** for tool integration.
+An AI-powered Utah tourism recommendation system that demonstrates Docker's AI capabilities, including **Docker Model Runner** for local LLM hosting and **MCP Gateway** for tool integration.
 
-![Utah Tourism AI](https://img.shields.io/badge/Docker-AI-blue) ![Llama 3.2](https://img.shields.io/badge/LLM-Llama%203.2-green) ![MCP](https://img.shields.io/badge/Protocol-MCP-orange)
+![Docker AI](https://img.shields.io/badge/Docker-AI-blue) ![Llama 3.2](https://img.shields.io/badge/LLM-Llama%203.2-green) ![MCP](https://img.shields.io/badge/Protocol-MCP-orange)
 
 ## Features
 
-- 🤖 **Local LLM** - Runs Llama 3.2 via Docker Model Runner (no API keys needed!)
-- 🔌 **MCP Integration** - Connects to external tools via Docker MCP Gateway
-- 🏔️ **Utah Expertise** - Comprehensive knowledge of Utah's Mighty Five parks and more
-- 🎨 **Beautiful UI** - Modern, responsive web interface
-- 🐳 **Single Compose File** - Everything orchestrated with Docker Compose
+- **Local LLM** - Runs Llama 3.2 via Docker Model Runner (no API keys needed)
+- **MCP Integration** - Connects to external tools via Docker MCP Gateway for real-time weather and web search
+- **Utah Expertise** - Comprehensive knowledge of Utah's Mighty Five national parks
+- **Modern UI** - Responsive web interface with Tailwind CSS
+- **PostgreSQL Database** - Stores recommendation history
+- **Single Compose File** - Everything orchestrated with Docker Compose
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Docker Compose                            │
-│  ┌─────────────────┐  ┌─────────────┐  ┌─────────────────┐  │
-│  │  Utah Tourism   │  │    MCP      │  │  Docker Model   │  │
-│  │     App         │──│   Gateway   │  │    Runner       │  │
-│  │   (FastAPI)     │  │             │  │   (Llama 3.2)   │  │
-│  └────────┬────────┘  └──────┬──────┘  └────────┬────────┘  │
-│           │                  │                   │           │
-│           └──────────────────┴───────────────────┘           │
-│                              │                               │
-│                     OpenAI-compatible API                    │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                         Docker Compose                           │
+│  ┌──────────────┐  ┌───────────┐  ┌──────────────┐  ┌────────┐  │
+│  │ Utah Tourism │  │    MCP    │  │ Docker Model │  │ Postgres│  │
+│  │     App      │──│  Gateway  │  │   Runner     │  │   DB   │  │
+│  │  (FastAPI)   │  │           │  │ (Llama 3.2)  │  │        │  │
+│  └──────┬───────┘  └─────┬─────┘  └──────┬───────┘  └────┬───┘  │
+│         │                │                │               │      │
+│         └────────────────┴────────────────┴───────────────┘      │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
@@ -69,49 +68,45 @@ Open [http://localhost:8080](http://localhost:8080) in your browser.
 
 ## Usage
 
-1. **Enter your interests** - What excites you? Hiking, photography, skiing?
+1. **Enter your interests** - Hiking, photography, skiing, etc.
 2. **Set your parameters** - Duration, season, activity level
-3. **Generate recommendations** - The AI creates personalized itineraries
-4. **Explore suggestions** - Get detailed destinations, tips, and packing lists
+3. **Generate recommendations** - AI creates personalized itineraries with real-time weather and search data
+4. **View history** - Browse past recommendations at `/history`
 
 ## Project Structure
 
 ```
 utah-tourism-ai/
-├── compose.yaml           # Docker Compose configuration
-├── Dockerfile             # Application container definition
-├── pyproject.toml         # Python dependencies
+├── compose.yaml              # Docker Compose configuration
+├── Dockerfile                # Application container definition
+├── pyproject.toml            # Python dependencies
 ├── src/
-│   ├── main.py           # FastAPI application
-│   ├── llm_client.py     # Docker Model Runner client
-│   ├── mcp_client.py     # MCP Gateway client
-│   └── utah_data.py      # Utah destination data
-├── templates/
-│   ├── index.html        # Main page
-│   └── recommendation.html # Results page
-└── static/
-    └── style.css         # Additional styles
+│   ├── main.py              # FastAPI application with endpoints
+│   ├── llm_client.py        # Docker Model Runner client
+│   ├── mcp_client.py        # MCP Gateway client (weather, search)
+│   ├── utah_data.py         # Utah destination data
+│   └── database.py          # PostgreSQL database models
+└── templates/
+    ├── index.html           # Main page
+    ├── recommendation.html  # Results page
+    └── history.html         # Recommendation history
 ```
 
 ## Configuration
 
 ### Docker Compose (compose.yaml)
 
-The compose file defines three main components:
+The compose file defines four main services:
 
 ```yaml
 services:
   utah-tourism-app:     # FastAPI web application
-    # ...
-  
-  mcp-gateway:          # MCP Gateway for tool access
-    image: docker/mcp-gateway:latest
-    # ...
+  mcp-gateway:          # MCP Gateway for tools (weather, search)
+  db:                   # PostgreSQL database
 
 models:
   llm:                  # Local LLM via Docker Model Runner
     model: ai/llama3.2
-    context_size: 8192
 ```
 
 ### Available Models
@@ -127,20 +122,11 @@ You can change the model in `compose.yaml`:
 
 ### MCP Servers
 
-The MCP Gateway can connect to various servers:
+The MCP Gateway connects to:
+- **duckduckgo** - Web search for travel recommendations
+- **openweather** - Real-time weather data for Utah cities
 
-```yaml
-mcp-gateway:
-  command:
-    - --transport=sse
-    - --servers=duckduckgo,fetch  # Add more servers here
-```
-
-Available servers include:
-- `duckduckgo` - Web search
-- `fetch` - URL fetching
-- `github` - GitHub integration
-- And [many more](https://hub.docker.com/mcp)
+Additional servers available at [Docker Hub MCP](https://hub.docker.com/search?q=mcp)
 
 ## Development
 
@@ -184,6 +170,10 @@ docker compose up
 | `/recommend` | POST | Generate recommendation (HTML) |
 | `/api/recommend` | POST | Generate recommendation (JSON) |
 | `/api/destinations` | GET | List all destinations |
+| `/history` | GET | View recommendation history |
+| `/api/recommendations` | GET | Get recommendations as JSON |
+| `/api/recommendations/{id}` | GET | Get specific recommendation |
+| `/api/tools` | GET | List available MCP tools |
 
 ### Example API Usage
 
@@ -218,9 +208,16 @@ docker compose logs mcp-gateway
 
 ### Slow Responses
 
-- Increase `context_size` for longer responses
-- Use a smaller model for faster responses
+- Use a smaller model like `ai/smollm2` for faster responses
+- Reduce `context_size` in compose.yaml
 - Enable GPU acceleration if available
+
+### Database Connection Issues
+
+Check that PostgreSQL is running:
+```bash
+docker compose logs db
+```
 
 ## License
 

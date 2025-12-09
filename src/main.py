@@ -6,9 +6,7 @@ and MCP Gateway for intelligent travel suggestions.
 """
 
 import os
-import json
 import logging
-from typing import Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Form, HTTPException
@@ -18,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 
 from .llm_client import LLMClient
 from .mcp_client import MCPClient
-from .utah_data import UTAH_DESTINATIONS, get_destinations_context, get_destinations_summary, get_weather_locations
+from .utah_data import UTAH_DESTINATIONS, get_destinations_summary, get_weather_locations
 from .database import DatabaseManager
 
 # Configure logging
@@ -92,6 +90,85 @@ async def list_tools(request: Request):
         return {"error": str(e), "tools": []}
 
 
+async def _generate_recommendation_internal(
+    request: Request,
+    interests: str,
+    duration: str,
+    season: str,
+    activity_level: str
+) -> tuple[str, bool]:
+    """
+    Internal function to generate recommendations.
+    Returns tuple of (recommendation_text, used_search).
+    """
+    llm_client: LLMClient = request.app.state.llm_client
+    mcp_client: MCPClient = request.app.state.mcp_client
+
+    # Use minimal static context - let web search provide fresh, dynamic info
+    utah_context = get_destinations_summary()
+
+    # Fetch current weather for relevant locations
+    weather_info = ""
+    try:
+        weather_locations = get_weather_locations(interests, season)
+        logger.info(f"Fetching weather for: {weather_locations}")
+
+        weather_results = []
+        for location in weather_locations:
+            weather_data = await mcp_client.get_weather(location)
+            if weather_data:
+                weather_results.append(f"**{location}**: {weather_data}")
+
+        if weather_results:
+            weather_info = "\n".join(weather_results)
+            logger.info(f"Weather fetched for {len(weather_results)} locations")
+    except Exception as e:
+        logger.warning(f"Weather fetch failed (continuing without): {e}")
+
+    # Always search for fresh, dynamic information
+    search_results = ""
+    try:
+        search_query = f"best {interests} in Utah {season} {duration} itinerary recommendations 2025"
+        search_results = await mcp_client.search(search_query)
+        logger.info(f"Search completed for: {search_query}")
+    except Exception as e:
+        logger.warning(f"Search failed (continuing without): {e}")
+
+    # Combine weather and search results
+    additional_context = ""
+    if weather_info:
+        additional_context += f"\n**Current Weather Conditions:**\n{weather_info}\n"
+    if search_results:
+        additional_context += f"\n**Travel Tips from Web:**\n{search_results}"
+
+    # Close MCP session before LLM generation to avoid timeout
+    await mcp_client.close()
+
+    # Generate recommendation using LLM
+    recommendation = await llm_client.generate_recommendation(
+        interests=interests,
+        duration=duration,
+        season=season,
+        activity_level=activity_level,
+        utah_context=utah_context,
+        search_results=additional_context
+    )
+
+    # Save recommendation to database
+    db: DatabaseManager = request.app.state.db
+    saved_rec = await db.save_recommendation(
+        interests=interests,
+        duration=duration,
+        season=season,
+        activity_level=activity_level,
+        recommendation_text=recommendation,
+        used_search=bool(search_results)
+    )
+    logger.info(f"Saved recommendation to database with ID: {saved_rec.id}")
+
+    return recommendation, bool(search_results)
+
+
 @app.post("/recommend", response_class=HTMLResponse)
 async def get_recommendation(
     request: Request,
@@ -103,78 +180,14 @@ async def get_recommendation(
 ):
     """
     Generate personalized Utah travel recommendations.
-    
+
     Uses the local LLM via Docker Model Runner and optionally
     enhances with real-time data via MCP Gateway tools.
     """
-    llm_client: LLMClient = request.app.state.llm_client
-    mcp_client: MCPClient = request.app.state.mcp_client
-    
     try:
-        # Use minimal static context - let web search provide fresh, dynamic info
-        utah_context = get_destinations_summary()
-
-        # Fetch current weather for relevant locations
-        weather_info = ""
-        try:
-            weather_locations = get_weather_locations(interests, season)
-            logger.info(f"Fetching weather for: {weather_locations}")
-
-            weather_results = []
-            for location in weather_locations:
-                weather_data = await mcp_client.get_weather(location)
-                if weather_data:
-                    weather_results.append(f"**{location}**: {weather_data}")
-
-            if weather_results:
-                weather_info = "\n".join(weather_results)
-                logger.info(f"Weather fetched for {len(weather_results)} locations")
-        except Exception as e:
-            logger.warning(f"Weather fetch failed (continuing without): {e}")
-            weather_info = ""
-
-        # Always search for fresh, dynamic information (ignore include_search flag)
-        search_results = ""
-        try:
-            # More specific search query for better results
-            search_query = f"best {interests} in Utah {season} {duration} itinerary recommendations 2025"
-            search_results = await mcp_client.search(search_query)
-            logger.info(f"Search completed for: {search_query}")
-        except Exception as e:
-            logger.warning(f"Search failed (continuing without): {e}")
-            search_results = ""
-
-        # Combine weather and search results
-        additional_context = ""
-        if weather_info:
-            additional_context += f"\n**Current Weather Conditions:**\n{weather_info}\n"
-        if search_results:
-            additional_context += f"\n**Travel Tips from Web:**\n{search_results}"
-
-        # Close MCP session before LLM generation to avoid timeout
-        await mcp_client.close()
-
-        # Generate recommendation using LLM
-        recommendation = await llm_client.generate_recommendation(
-            interests=interests,
-            duration=duration,
-            season=season,
-            activity_level=activity_level,
-            utah_context=utah_context,
-            search_results=additional_context
+        recommendation, used_search = await _generate_recommendation_internal(
+            request, interests, duration, season, activity_level
         )
-
-        # Save recommendation to database
-        db: DatabaseManager = request.app.state.db
-        saved_rec = await db.save_recommendation(
-            interests=interests,
-            duration=duration,
-            season=season,
-            activity_level=activity_level,
-            recommendation_text=recommendation,
-            used_search=bool(search_results)
-        )
-        logger.info(f"Saved recommendation to database with ID: {saved_rec.id}")
 
         return templates.TemplateResponse(
             "recommendation.html",
@@ -185,10 +198,10 @@ async def get_recommendation(
                 "duration": duration,
                 "season": season,
                 "activity_level": activity_level,
-                "used_search": bool(search_results)
+                "used_search": used_search
             }
         )
-        
+
     except Exception as e:
         logger.error(f"Error generating recommendation: {e}")
         raise HTTPException(
@@ -285,54 +298,11 @@ async def api_recommend(
     include_search: bool = Form(default=True)
 ):
     """JSON API endpoint for recommendations."""
-    llm_client: LLMClient = request.app.state.llm_client
-    mcp_client: MCPClient = request.app.state.mcp_client
-
     try:
-        # Use minimal static context - let web search provide fresh, dynamic info
-        utah_context = get_destinations_summary()
-
-        # Fetch weather
-        weather_info = ""
-        try:
-            weather_locations = get_weather_locations(interests, season)
-            weather_results = []
-            for location in weather_locations:
-                weather_data = await mcp_client.get_weather(location)
-                if weather_data:
-                    weather_results.append(f"**{location}**: {weather_data}")
-            if weather_results:
-                weather_info = "\n".join(weather_results)
-        except Exception:
-            pass
-
-        # Always search for fresh, dynamic information
-        search_results = ""
-        try:
-            search_query = f"best {interests} in Utah {season} {duration} itinerary recommendations 2025"
-            search_results = await mcp_client.search(search_query)
-        except Exception:
-            pass
-
-        # Combine weather and search
-        additional_context = ""
-        if weather_info:
-            additional_context += f"\n**Current Weather:**\n{weather_info}\n"
-        if search_results:
-            additional_context += f"\n**Travel Tips:**\n{search_results}"
-
-        # Close MCP session before LLM generation to avoid timeout
-        await mcp_client.close()
-
-        recommendation = await llm_client.generate_recommendation(
-            interests=interests,
-            duration=duration,
-            season=season,
-            activity_level=activity_level,
-            utah_context=utah_context,
-            search_results=additional_context
+        recommendation, used_search = await _generate_recommendation_internal(
+            request, interests, duration, season, activity_level
         )
-        
+
         return {
             "recommendation": recommendation,
             "parameters": {
@@ -341,8 +311,8 @@ async def api_recommend(
                 "season": season,
                 "activity_level": activity_level
             },
-            "enhanced_with_search": bool(search_results)
+            "enhanced_with_search": used_search
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

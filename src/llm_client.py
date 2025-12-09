@@ -7,9 +7,7 @@ Docker Model Runner.
 
 import os
 import logging
-from typing import Optional
 
-import httpx
 from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)

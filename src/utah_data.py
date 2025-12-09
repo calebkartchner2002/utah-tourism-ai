@@ -237,25 +237,45 @@ UTAH_DESTINATIONS = {
 
 def get_weather_locations(interests: str, season: str) -> list[str]:
     """
-    Determine which Utah cities to fetch weather for based on interests.
+    Determine which Utah cities to fetch weather for based on interests and season.
 
     Args:
         interests: User's travel interests
         season: Preferred season
 
     Returns:
-        List of city names for weather lookup
+        List of city names for weather lookup (max 3 unique locations)
     """
     interests_lower = interests.lower()
+    season_lower = season.lower()
     locations = []
 
-    # Skiing locations
-    if "ski" in interests_lower or season.lower() == "winter":
+    # Skiing/winter sports locations
+    if any(word in interests_lower for word in ["ski", "snow", "winter sports"]) or season_lower == "winter":
         locations.extend(["Park City, Utah", "Salt Lake City, Utah"])
 
-    # Southern Utah parks
-    if any(word in interests_lower for word in ["hiking", "photography", "nature", "canyon", "national park"]):
-        locations.extend(["Moab, Utah", "Springdale, Utah"])
+    # Moab area (Arches, Canyonlands)
+    if any(word in interests_lower for word in ["arches", "canyonlands", "moab", "mountain bike", "4x4", "off-road"]):
+        locations.append("Moab, Utah")
+
+    # Zion area
+    if any(word in interests_lower for word in ["zion", "angel", "narrows", "springdale"]):
+        locations.append("Springdale, Utah")
+
+    # Bryce Canyon area
+    if any(word in interests_lower for word in ["bryce", "hoodoo"]):
+        locations.append("Bryce Canyon City, Utah")
+
+    # General southern Utah parks/hiking
+    if any(word in interests_lower for word in ["hiking", "photography", "nature", "canyon", "national park", "desert"]):
+        if "Moab, Utah" not in locations:
+            locations.append("Moab, Utah")
+        if "Springdale, Utah" not in locations:
+            locations.append("Springdale, Utah")
+
+    # St. George area (warm weather destination)
+    if any(word in interests_lower for word in ["golf", "warm", "st. george", "st george", "snow canyon"]):
+        locations.append("St. George, Utah")
 
     # Default to Salt Lake City if no specific match
     if not locations:
@@ -263,89 +283,6 @@ def get_weather_locations(interests: str, season: str) -> list[str]:
 
     # Return unique locations (max 3)
     return list(dict.fromkeys(locations))[:3]
-
-
-def get_destinations_context() -> str:
-    """
-    Generate a context string from Utah destinations for LLM prompts.
-
-    Returns:
-        Formatted string with Utah destination information
-    """
-    context_parts = []
-    
-    # National Parks
-    context_parts.append("## Utah's Mighty Five National Parks\n")
-    for park_id, park in UTAH_DESTINATIONS["national_parks"].items():
-        context_parts.append(f"### {park['name']}")
-        context_parts.append(f"Location: {park['location']}")
-        context_parts.append(f"Best Season: {park['best_season']}")
-        context_parts.append(f"Activity Level: {park['activity_level']}")
-        context_parts.append("Highlights:")
-        for highlight in park['highlights'][:3]:
-            context_parts.append(f"  - {highlight}")
-        context_parts.append("")
-    
-    # State Parks
-    context_parts.append("\n## Notable State Parks\n")
-    for park_id, park in UTAH_DESTINATIONS["state_parks"].items():
-        context_parts.append(f"- **{park['name']}** ({park['location']}): {', '.join(park['highlights'][:2])}")
-    
-    # Gateway Cities
-    context_parts.append("\n## Gateway Cities\n")
-    for city_id, city in UTAH_DESTINATIONS["cities_towns"].items():
-        context_parts.append(f"- **{city['name']}**: {', '.join(city['highlights'][:2])}")
-    
-    # Scenic Byways
-    context_parts.append("\n## Scenic Drives\n")
-    for byway_id, byway in UTAH_DESTINATIONS["scenic_byways"].items():
-        context_parts.append(f"- **{byway['name']}**: {byway['description']}")
-    
-    # Skiing
-    context_parts.append("\n## Ski Resorts\n")
-    for resort_id, resort in UTAH_DESTINATIONS["skiing"].items():
-        context_parts.append(f"- **{resort['name']}**: {', '.join(resort['highlights'][:2])}")
-    
-    return "\n".join(context_parts)
-
-
-def get_destination_by_interest(interest: str) -> list[dict]:
-    """
-    Find destinations matching a specific interest.
-    
-    Args:
-        interest: Interest keyword (hiking, skiing, photography, etc.)
-        
-    Returns:
-        List of matching destinations
-    """
-    interest_lower = interest.lower()
-    matches = []
-    
-    # Interest to destination mapping
-    interest_mapping = {
-        "hiking": ["national_parks", "state_parks", "monuments"],
-        "skiing": ["skiing"],
-        "photography": ["national_parks", "monuments", "scenic_byways"],
-        "family": ["state_parks", "cities_towns"],
-        "adventure": ["national_parks", "monuments"],
-        "relaxation": ["cities_towns", "skiing"],
-        "history": ["monuments", "cities_towns"],
-        "stargazing": ["national_parks", "monuments"],
-    }
-    
-    categories = interest_mapping.get(interest_lower, list(UTAH_DESTINATIONS.keys()))
-    
-    for category in categories:
-        if category in UTAH_DESTINATIONS:
-            for dest_id, dest in UTAH_DESTINATIONS[category].items():
-                matches.append({
-                    "category": category,
-                    "id": dest_id,
-                    **dest
-                })
-    
-    return matches
 
 
 def get_destinations_summary() -> str:

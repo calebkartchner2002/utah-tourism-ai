@@ -10,9 +10,7 @@ import json
 import logging
 from typing import Optional
 
-import httpx
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp import ClientSession
 from mcp.client.sse import sse_client
 
 logger = logging.getLogger(__name__)
