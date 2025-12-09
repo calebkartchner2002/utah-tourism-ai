@@ -19,6 +19,7 @@ from fastapi.templating import Jinja2Templates
 from .llm_client import LLMClient
 from .mcp_client import MCPClient
 from .utah_data import UTAH_DESTINATIONS, get_destinations_context, get_destinations_summary, get_weather_locations
+from .database import DatabaseManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -31,16 +32,22 @@ async def lifespan(app: FastAPI):
     # Initialize clients
     app.state.llm_client = LLMClient()
     app.state.mcp_client = MCPClient()
-    
+    app.state.db = DatabaseManager()
+
+    # Initialize database tables
+    await app.state.db.init_db()
+
     logger.info("Utah Tourism AI initialized")
     logger.info(f"LLM API URL: {os.getenv('LLM_API_URL', 'not set')}")
     logger.info(f"MCP Gateway: {os.getenv('MCP_GATEWAY_ENDPOINT', 'not set')}")
-    
+    logger.info(f"Database: Connected")
+
     yield
-    
+
     # Cleanup
     await app.state.llm_client.close()
     await app.state.mcp_client.close()
+    await app.state.db.close()
     logger.info("Utah Tourism AI shutdown complete")
 
 
@@ -156,7 +163,19 @@ async def get_recommendation(
             utah_context=utah_context,
             search_results=additional_context
         )
-        
+
+        # Save recommendation to database
+        db: DatabaseManager = request.app.state.db
+        saved_rec = await db.save_recommendation(
+            interests=interests,
+            duration=duration,
+            season=season,
+            activity_level=activity_level,
+            recommendation_text=recommendation,
+            used_search=bool(search_results)
+        )
+        logger.info(f"Saved recommendation to database with ID: {saved_rec.id}")
+
         return templates.TemplateResponse(
             "recommendation.html",
             {
@@ -182,6 +201,78 @@ async def get_recommendation(
 async def list_destinations():
     """API endpoint to list all Utah destinations."""
     return {"destinations": UTAH_DESTINATIONS}
+
+
+@app.get("/history", response_class=HTMLResponse)
+async def view_history(request: Request):
+    """View all saved recommendations."""
+    db: DatabaseManager = request.app.state.db
+    try:
+        recommendations = await db.get_all_recommendations(limit=50)
+        return templates.TemplateResponse(
+            "history.html",
+            {
+                "request": request,
+                "recommendations": recommendations
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error fetching recommendations: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch recommendations: {str(e)}"
+        )
+
+
+@app.get("/api/recommendations")
+async def get_recommendations(request: Request, limit: int = 50):
+    """Get all saved recommendations as JSON."""
+    db: DatabaseManager = request.app.state.db
+    try:
+        recommendations = await db.get_all_recommendations(limit=limit)
+        return {
+            "recommendations": [
+                {
+                    "id": rec.id,
+                    "interests": rec.interests,
+                    "duration": rec.duration,
+                    "season": rec.season,
+                    "activity_level": rec.activity_level,
+                    "recommendation_text": rec.recommendation_text,
+                    "used_search": rec.used_search,
+                    "created_at": rec.created_at.isoformat()
+                }
+                for rec in recommendations
+            ],
+            "count": len(recommendations)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/recommendations/{recommendation_id}")
+async def get_recommendation_detail(request: Request, recommendation_id: int):
+    """Get a specific recommendation by ID."""
+    db: DatabaseManager = request.app.state.db
+    try:
+        rec = await db.get_recommendation_by_id(recommendation_id)
+        if not rec:
+            raise HTTPException(status_code=404, detail="Recommendation not found")
+
+        return {
+            "id": rec.id,
+            "interests": rec.interests,
+            "duration": rec.duration,
+            "season": rec.season,
+            "activity_level": rec.activity_level,
+            "recommendation_text": rec.recommendation_text,
+            "used_search": rec.used_search,
+            "created_at": rec.created_at.isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/recommend")

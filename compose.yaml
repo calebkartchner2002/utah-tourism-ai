@@ -12,8 +12,11 @@ services:
     environment:
       # MCP Gateway endpoint for tool access
       - MCP_GATEWAY_ENDPOINT=http://mcp-gateway:8811/sse
+      # Database connection
+      - DATABASE_URL=postgresql+psycopg://utah_user:utah_password@postgres:5432/utah_tourism
     depends_on:
       - mcp-gateway
+      - postgres
     # Bind to the LLM model
     models:
       llm:
@@ -31,6 +34,21 @@ services:
       - --secrets=/.env
       # MCP servers for Utah tourism functionality
       - --servers=duckduckgo,fetch,openweather
+
+  # PostgreSQL database for storing recommendations
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=utah_user
+      - POSTGRES_PASSWORD=utah_password
+      - POSTGRES_DB=utah_tourism
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
 
 # Docker Model Runner configuration
 # Using Llama 3.2 for balanced performance and quality
